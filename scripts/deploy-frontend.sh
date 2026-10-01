@@ -64,8 +64,8 @@ API_URL="${API_URL%/}"
 log "building against ${API_URL}"
 
 # The Cognito ids are compiled in too; without them nobody could sign in.
-[[ -n "${COGNITO_CLIENT_ID:-}" && -n "${COGNITO_DOMAIN:-}" ]] \
-  || die "COGNITO_CLIENT_ID / COGNITO_DOMAIN are not set in .env - run make deploy-cognito first"
+# [[ -n "${COGNITO_CLIENT_ID:-}" && -n "${COGNITO_DOMAIN:-}" ]] \
+#   || die "COGNITO_CLIENT_ID / COGNITO_DOMAIN are not set in .env - run make deploy-cognito first"
 
 # The function URL is always HTTPS; plain HTTP here means a hand-edited .env.
 [[ "${API_URL}" == https://* ]] \

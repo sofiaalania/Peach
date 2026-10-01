@@ -1,11 +1,8 @@
 "use client";
 
-import { LogOut } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
-import { signOut, useSession } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -15,8 +12,6 @@ const links = [
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const router = useRouter();
-  const session = useSession();
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
@@ -54,30 +49,6 @@ export function SiteHeader() {
           })}
         </nav>
 
-        {session && (
-          <div className="ml-auto flex items-center gap-2">
-            <span
-              aria-hidden
-              className="grid size-6 place-items-center rounded-full bg-tint-peach text-xs font-semibold text-tint-peach-foreground"
-            >
-              {session.name.charAt(0).toUpperCase()}
-            </span>
-            <span className="hidden text-sm text-muted-foreground sm:inline">
-              {session.email}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                signOut();
-                router.replace("/");
-              }}
-            >
-              <LogOut data-icon="inline-start" className="size-4" />
-              Log out
-            </Button>
-          </div>
-        )}
       </div>
     </header>
   );

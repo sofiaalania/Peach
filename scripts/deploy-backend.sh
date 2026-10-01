@@ -283,11 +283,11 @@ if ! aws cloudformation describe-stacks --stack-name "${STACK_NAME}" >/dev/null 
 else
   log "updating ${STACK_NAME}"
 fi
-
+PARAMS_FILE_AWS="$(cygpath -w "${PARAMS_FILE}")"
 if ! aws cloudformation deploy \
   --stack-name "${STACK_NAME}" \
   --template-file "${TEMPLATE}" \
-  --parameter-overrides "file://${PARAMS_FILE}" \
+  --parameter-overrides "file://${PARAMS_FILE_AWS}" \
   --capabilities CAPABILITY_IAM \
   --no-fail-on-empty-changeset \
   --tags "${TAGS[@]}"; then

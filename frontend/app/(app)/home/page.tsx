@@ -1,7 +1,7 @@
-import { TaskDashboard } from "@/components/task-dashboard";
+import { ItemBoard } from "@/components/item-board";
 
 export const metadata = { title: "Home | Peach" };
 
 export default function HomePage() {
-  return <TaskDashboard />;
+  return <ItemBoard />;
 }
