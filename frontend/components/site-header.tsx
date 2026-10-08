@@ -19,8 +19,19 @@ export function SiteHeader() {
   const email = auth.user?.profile.email;
 
   const handleLogout = async () => {
-    await auth.signoutRedirect();
-  };
+  const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!;
+  const logoutUri = `${process.env.NEXT_PUBLIC_SITE_URL}/home/`;
+
+  const logoutUrl = new URL(
+    "https://eu-central-1cyjzbqhth.auth.eu-central-1.amazoncognito.com/logout"
+  );
+
+  logoutUrl.searchParams.set("client_id", clientId);
+  logoutUrl.searchParams.set("logout_uri", logoutUri);
+
+  await auth.removeUser();
+  window.location.assign(logoutUrl.toString());
+};
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">

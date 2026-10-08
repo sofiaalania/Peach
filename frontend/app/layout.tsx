@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
-
+import { SiteHeader } from "@/components/site-header";
 import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -32,6 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           hydrates; this silences that one-level mismatch only. */}
       <body className="flex min-h-full flex-col" suppressHydrationWarning>
         <Providers>
+          <SiteHeader />
           {children}
           <Toaster />
         </Providers>

@@ -12,11 +12,6 @@ export default function LoginPage() {
       return;
     }
 
-    if (auth.isAuthenticated) {
-      window.location.replace("/home/");
-      return;
-    }
-
     redirectStarted.current = true;
     void auth.signinRedirect();
   }, [auth]);

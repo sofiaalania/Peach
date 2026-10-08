@@ -1,9 +1,16 @@
 "use client";
 
 import { useAuth } from "react-oidc-context";
+import { useEffect } from "react";
 
 export default function AuthCallbackPage() {
   const auth = useAuth();
+
+  useEffect(() => {
+    if (!auth.isLoading && auth.isAuthenticated) {
+      window.location.replace("/home/");
+    }
+  }, [auth.isLoading, auth.isAuthenticated]);
 
   if (auth.error) {
     return (

@@ -9,6 +9,6 @@ export const cognitoAuthConfig: AuthProviderProps = {
   scope: "openid email profile",
   automaticSilentRenew: false,
   onSigninCallback: () => {
-    window.location.replace("/home/");
+    window.history.replaceState({}, document.title, "/home/");
   },
 };
