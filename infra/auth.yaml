@@ -1,0 +1,134 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Peach Lab 4 - Cognito authentication"
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: peach
+
+  SiteUrl:
+    Type: String
+    Default: https://d3p3m266atvuc5.cloudfront.net
+
+  CognitoDomainPrefix:
+    Type: String
+    Default: eu-central-1cyjzbqhth
+
+  GoogleClientId:
+    Type: String
+    NoEcho: true
+
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+
+Resources:
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${ProjectName}-users"
+      UserPoolTier: ESSENTIALS
+
+      UsernameAttributes:
+        - email
+
+      AutoVerifiedAttributes:
+        - email
+
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+
+      UserPoolTags:
+        PROJECT_NAME: !Ref ProjectName
+
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: "openid email profile"
+
+      AttributeMapping:
+        email: email
+        email_verified: email_verified
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn:
+      - GoogleIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !Sub "${ProjectName}-frontend"
+      GenerateSecret: false
+
+      AllowedOAuthFlowsUserPoolClient: true
+
+      AllowedOAuthFlows:
+        - code
+
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+
+      SupportedIdentityProviders:
+        - COGNITO
+        - Google
+
+      CallbackURLs:
+        - !Sub "${SiteUrl}/auth/callback/"
+        - "http://localhost:3000/auth/callback/"
+
+      LogoutURLs:
+        - !Sub "${SiteUrl}/home/"
+        - "http://localhost:3000/home/"
+
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref CognitoDomainPrefix
+      UserPoolId: !Ref UserPool
+      ManagedLoginVersion: 2
+
+  ManagedLoginBranding:
+    Type: AWS::Cognito::ManagedLoginBranding
+    DependsOn:
+      - UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientId: !Ref UserPoolClient
+      UseCognitoProvidedValues: true
+
+Outputs:
+  UserPoolId:
+    Value: !Ref UserPool
+
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+
+  CognitoAuthority:
+    Value: !Sub
+      - "https://cognito-idp.${AWS::Region}.amazonaws.com/${PoolId}"
+      - PoolId: !Ref UserPool
+
+  CognitoDomain:
+    Value: !Sub
+      - "https://${Prefix}.auth.${AWS::Region}.amazoncognito.com"
+      - Prefix: !Ref CognitoDomainPrefix

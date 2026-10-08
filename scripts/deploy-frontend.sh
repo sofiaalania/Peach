@@ -112,10 +112,9 @@ log "building the static export"
 rm -rf "${APP}/out"
 (cd "${APP}" && NEXT_OUTPUT=export \
   NEXT_PUBLIC_API_URL="${API_URL}" \
-  NEXT_PUBLIC_COGNITO_REGION="${COGNITO_REGION:-${AWS_REGION}}" \
+  NEXT_PUBLIC_COGNITO_AUTHORITY="https://cognito-idp.${COGNITO_REGION:-${AWS_REGION}}.amazonaws.com/${COGNITO_USER_POOL_ID}" \
   NEXT_PUBLIC_COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID}" \
-  NEXT_PUBLIC_COGNITO_DOMAIN="${COGNITO_DOMAIN}" \
-  NEXT_PUBLIC_COGNITO_GOOGLE_ENABLED="${COGNITO_GOOGLE_ENABLED:-false}" \
+  NEXT_PUBLIC_SITE_URL="${SITE_URL}" \
   "${PM[@]}" build)
 [[ -f "${APP}/out/index.html" ]] || die "the export produced no out/index.html"
 

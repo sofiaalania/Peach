@@ -1,7 +1,9 @@
+
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "react-oidc-context";
 
 import { cn } from "@/lib/utils";
 
@@ -12,6 +14,13 @@ const links = [
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const auth = useAuth();
+
+  const email = auth.user?.profile.email;
+
+  const handleLogout = async () => {
+    await auth.signoutRedirect();
+  };
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
@@ -49,6 +58,31 @@ export function SiteHeader() {
           })}
         </nav>
 
+        <div className="ml-auto flex items-center gap-3 text-sm">
+          {auth.isLoading ? (
+            <span className="text-muted-foreground">Loading...</span>
+          ) : auth.isAuthenticated ? (
+            <>
+              <span className="hidden max-w-48 truncate text-muted-foreground sm:inline">
+                {email ?? "Signed in"}
+              </span>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-md border border-border px-3 py-1.5 font-medium hover:bg-accent"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <Link
+              href="/login/"
+              className="rounded-md bg-foreground px-3 py-1.5 font-medium text-background hover:opacity-80"
+            >
+              Login
+            </Link>
+          )}
+        </div>
       </div>
     </header>
   );
