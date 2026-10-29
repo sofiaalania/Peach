@@ -15,6 +15,7 @@ node_modules/
 out/
 .turbo/
 *.tsbuildinfo
+.pnpm-store/
 
 # --- env ---
 .env

@@ -319,11 +319,12 @@ FUNCTION_ERROR="$(aws lambda invoke \
   --payload '{"action":"migrate"}' \
   --query FunctionError --output text \
   "${RESULT_FILE}")"
-if [[ -n "${FUNCTION_ERROR}" && "${FUNCTION_ERROR}" != "None" ]]; then
+if [[ -n "${FUNCTION_ERROR}" && "${FUNCTION_ERROR}" != "None" ]] || ! grep -q '"status": "ok"' "${RESULT_FILE}"; then
   cat "${RESULT_FILE}" >&2
   echo >&2
   die "migrations failed - see: make logs-backend"
 fi
+log "migrations confirmed: $(cat "${RESULT_FILE}")"
 
 # --- report -----------------------------------------------------------------
 

@@ -61,9 +61,11 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       INTERNAL_API_URL: ${INTERNAL_API_URL:-http://backend:8000}
-      NEXT_PUBLIC_COGNITO_REGION: ${COGNITO_REGION:-us-east-1}
+      NEXT_PUBLIC_COGNITO_REGION: ${COGNITO_REGION:-eu-central-1}
       NEXT_PUBLIC_COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID:-}
       NEXT_PUBLIC_COGNITO_DOMAIN: ${COGNITO_DOMAIN:-}
+      NEXT_PUBLIC_COGNITO_AUTHORITY: https://cognito-idp.eu-central-1.amazonaws.com/eu-central-1_CyJZbQHTH
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
       NEXT_PUBLIC_COGNITO_GOOGLE_ENABLED: ${COGNITO_GOOGLE_ENABLED:-false}
       NODE_ENV: production
     ports:

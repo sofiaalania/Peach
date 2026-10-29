@@ -84,3 +84,18 @@ destroy-frontend: ## Delete the frontend stack (bucket + distribution)
 
 github-role: ## Create the IAM role GitHub Actions assumes to deploy (OIDC, no keys)
 	./scripts/github-role.sh
+
+report-now: ## Request report on demand: make report-now WEEK=2026-W39
+	aws sqs send-message \
+		--queue-url $$(aws sqs get-queue-url --queue-name $${PROJECT_NAME:-peach}-report-requests --query QueueUrl --output text --region $${AWS_REGION:-eu-central-1}) \
+		--message-body '{"week":"$(WEEK)","source":"manual"}' \
+		--region $${AWS_REGION:-eu-central-1}
+
+logs-builder: ## Tail report-builder CloudWatch logs
+	aws logs tail /aws/lambda/$${PROJECT_NAME:-peach}-report-builder --since 15m --region $${AWS_REGION:-eu-central-1}
+
+logs-mailer: ## Tail report-mailer CloudWatch logs
+	aws logs tail /aws/lambda/$${PROJECT_NAME:-peach}-report-mailer --since 15m --region $${AWS_REGION:-eu-central-1}
+
+deploy-reports: ## Deploy Lab 5 reports stack: make deploy-reports EMAIL=you@example.com
+	./scripts/deploy-reports.sh

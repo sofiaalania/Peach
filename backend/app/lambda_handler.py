@@ -41,8 +41,18 @@ def _migrate() -> dict[str, str]:
     return {"status": "ok", "migrated_to": "head"}
 
 
+def _seed() -> dict[str, Any]:
+    from app.reports.seed import seed_meetings_sync
+
+    count = seed_meetings_sync()
+    logger.info("seed applied: inserted %d meetings", count)
+    return {"status": "ok", "inserted": count}
+
+
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if event.get("action") == "migrate":
         return _migrate()
+    if event.get("action") == "seed":
+        return _seed()
     asyncio.set_event_loop(_loop)
     return _asgi(event, context)
