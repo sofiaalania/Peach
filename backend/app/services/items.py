@@ -10,20 +10,22 @@ from app.schemas import ItemCreate, ItemUpdate
 async def list_items(
     session: AsyncSession,
     *,
+    owner_id: str,
     limit: int,
     offset: int,
 ) -> tuple[list[Item], int]:
+    """Return items belonging to *owner_id* only."""
+    base = select(Item).where(Item.owner_id == owner_id)
 
     total = (
         await session.scalar(
-            select(func.count()).select_from(Item)
+            select(func.count()).select_from(base.subquery())
         )
         or 0
     )
 
     result = await session.execute(
-        select(Item)
-        .order_by(Item.created_at.desc())
+        base.order_by(Item.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
@@ -34,19 +36,34 @@ async def list_items(
 async def get_item(
     session: AsyncSession,
     item_id: uuid.UUID,
+    *,
+    owner_id: str,
 ) -> Item | None:
-
+    """Fetch an item only if it belongs to *owner_id*."""
     return await session.scalar(
-        select(Item).where(Item.id == item_id)
+        select(Item).where(Item.id == item_id, Item.owner_id == owner_id)
     )
 
 
 async def create_item(
     session: AsyncSession,
     payload: ItemCreate,
+    *,
+    owner_id: str,
 ) -> Item:
 
-    item = Item(**payload.model_dump())
+    data = payload.model_dump()
+    # Serialize nested Pydantic models to dicts for JSONB storage
+    if data.get("agenda_items") is not None:
+        data["agenda_items"] = [
+            ai if isinstance(ai, dict) else ai for ai in data["agenda_items"]
+        ]
+    if data.get("action_items") is not None:
+        data["action_items"] = [
+            ai if isinstance(ai, dict) else ai for ai in data["action_items"]
+        ]
+
+    item = Item(**data, owner_id=owner_id)
 
     session.add(item)
     await session.flush()

@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import CurrentUser
 from app.db import SessionDep
 from app.schemas import ItemCreate, ItemList, ItemRead, ItemUpdate
 from app.services import items as items_service
@@ -11,8 +12,8 @@ from app.services import items as items_service
 router = APIRouter(prefix="/items", tags=["items"])
 
 
-async def _get_or_404(session: AsyncSession, item_id: uuid.UUID):
-    item = await items_service.get_item(session, item_id)
+async def _get_or_404(session: AsyncSession, item_id: uuid.UUID, *, owner_id: str):
+    item = await items_service.get_item(session, item_id, owner_id=owner_id)
 
     if item is None:
         raise HTTPException(
@@ -26,11 +27,13 @@ async def _get_or_404(session: AsyncSession, item_id: uuid.UUID):
 @router.get("", response_model=ItemList, summary="List items")
 async def list_items(
     session: SessionDep,
+    user: CurrentUser,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> ItemList:
     items, total = await items_service.list_items(
         session,
+        owner_id=user.sub,
         limit=limit,
         offset=offset,
     )
@@ -45,8 +48,9 @@ async def list_items(
 async def create_item(
     payload: ItemCreate,
     session: SessionDep,
+    user: CurrentUser,
 ) -> ItemRead:
-    item = await items_service.create_item(session, payload)
+    item = await items_service.create_item(session, payload, owner_id=user.sub)
     return ItemRead.model_validate(item)
 
 
@@ -54,9 +58,10 @@ async def create_item(
 async def get_item(
     item_id: uuid.UUID,
     session: SessionDep,
+    user: CurrentUser,
 ) -> ItemRead:
     return ItemRead.model_validate(
-        await _get_or_404(session, item_id)
+        await _get_or_404(session, item_id, owner_id=user.sub)
     )
 
 
@@ -65,8 +70,9 @@ async def update_item(
     item_id: uuid.UUID,
     payload: ItemUpdate,
     session: SessionDep,
+    user: CurrentUser,
 ) -> ItemRead:
-    item = await _get_or_404(session, item_id)
+    item = await _get_or_404(session, item_id, owner_id=user.sub)
 
     return ItemRead.model_validate(
         await items_service.update_item(session, item, payload)
@@ -77,8 +83,9 @@ async def update_item(
 async def delete_item(
     item_id: uuid.UUID,
     session: SessionDep,
+    user: CurrentUser,
 ) -> Response:
-    item = await _get_or_404(session, item_id)
+    item = await _get_or_404(session, item_id, owner_id=user.sub)
 
     await items_service.delete_item(session, item)
 

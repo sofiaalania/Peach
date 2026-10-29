@@ -164,4 +164,30 @@ describe("ItemBoard", () => {
       "true",
     );
   });
+
+  it("renders meeting event details on cards", async () => {
+    vi.spyOn(api, "listItems").mockResolvedValue({
+      items: [
+        makeItem({
+          id: "event-1",
+          name: "Sprint Retrospective",
+          start_time: "2026-11-01T14:00:00Z",
+          duration_minutes: 60,
+          participants: 8,
+          agenda_items: [{ topic: "Retro", owner: "Alice", minutes: 30 }],
+          action_items: [{ task: "Doc update", owner: "Bob", due_date: "2026-11-05" }],
+        }),
+      ],
+      total: 1,
+    });
+    renderWithQuery(<ItemBoard />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Sprint Retrospective")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("60m")).toBeInTheDocument();
+    expect(screen.getByText("8")).toBeInTheDocument();
+    expect(screen.getByText("1 agenda")).toBeInTheDocument();
+    expect(screen.getByText("1 action")).toBeInTheDocument();
+  });
 });

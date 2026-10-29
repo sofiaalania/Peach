@@ -95,3 +95,19 @@ async def client(anon_client: AsyncClient) -> AsyncClient:
     """Signed in as alice@example.com."""
     anon_client.headers.update(auth())
     return anon_client
+
+
+@pytest.fixture
+async def bob_client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
+    """Signed in as bob@example.com — for cross-user isolation tests."""
+    app = create_app()
+
+    async def _override() -> AsyncIterator[AsyncSession]:
+        yield session
+
+    app.dependency_overrides[get_session] = _override
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        client.headers.update(auth("bob-sub-00000000", "bob@example.com"))
+        yield client
+    app.dependency_overrides.clear()

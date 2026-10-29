@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlignLeft, Plus } from "lucide-react";
+import { AlignLeft, Calendar, Clock, Plus, Users } from "lucide-react";
 import { useRef, useState, type DragEvent } from "react";
 import { toast } from "sonner";
 
@@ -336,6 +336,7 @@ function BoardCard({
   onDragStart,
   onDragEnd,
 }: CardProps) {
+  const isEvent = Boolean(item.start_time);
   return (
     <div
       role="button"
@@ -371,14 +372,49 @@ function BoardCard({
           {item.description}
         </p>
       )}
-      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         {item.description && <AlignLeft aria-hidden className="size-3.5" />}
-        <span>
-          {new Date(item.created_at).toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-          })}
-        </span>
+        {isEvent && item.start_time && (
+          <span className="inline-flex items-center gap-1">
+            <Calendar aria-hidden className="size-3" />
+            {new Date(item.start_time).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+        )}
+        {item.duration_minutes && (
+          <span className="inline-flex items-center gap-1">
+            <Clock aria-hidden className="size-3" />
+            {item.duration_minutes}m
+          </span>
+        )}
+        {item.participants && (
+          <span className="inline-flex items-center gap-1">
+            <Users aria-hidden className="size-3" />
+            {item.participants}
+          </span>
+        )}
+        {item.agenda_items && item.agenda_items.length > 0 && (
+          <span className="rounded bg-accent px-1.5 py-0.5 text-[10px] font-medium">
+            {item.agenda_items.length} agenda
+          </span>
+        )}
+        {item.action_items && item.action_items.length > 0 && (
+          <span className="rounded bg-accent px-1.5 py-0.5 text-[10px] font-medium">
+            {item.action_items.length} action
+          </span>
+        )}
+        {!isEvent && (
+          <span>
+            {new Date(item.created_at).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            })}
+          </span>
+        )}
       </div>
     </div>
   );

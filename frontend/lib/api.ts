@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-
 /** Browser code must reach the API through the published port; server components
  *  resolve the Compose service name instead. */
 export function apiBaseUrl(): string {
@@ -20,11 +19,30 @@ export class ApiError extends Error {
   }
 }
 
+/** Get the current id_token from the OIDC session (if any). */
+function getIdToken(): string | null {
+  if (typeof window === "undefined") return null;
+  const storageKey = Object.keys(sessionStorage).find((k) =>
+    k.startsWith("oidc.user:"),
+  );
+  if (!storageKey) return null;
+  try {
+    const data = JSON.parse(sessionStorage.getItem(storageKey) ?? "{}");
+    return data.id_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function request<T>(
   path: string,
   schema: z.ZodType<T>,
   init?: RequestInit,
 ): Promise<T> {
+  const token = getIdToken();
+  const authHeaders: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
 
   let response: Response;
   try {
@@ -33,6 +51,7 @@ async function request<T>(
       cache: "no-store",
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders,
         ...(init?.headers ?? {}),
       },
     });
@@ -57,16 +76,45 @@ async function request<T>(
   return schema.parse(await response.json());
 }
 
-/* --- schemas mirroring the API contract in README section 5 --- */
+/* --- schemas mirroring the API contract --- */
 
 export const itemStatuses = ["todo", "in_progress", "done"] as const;
 export const itemStatusSchema = z.enum(itemStatuses);
+
+export const agendaItemSchema = z.object({
+  topic: z.string(),
+  owner: z.string(),
+  minutes: z.number().int().min(0),
+});
+
+export const actionItemSchema = z.object({
+  task: z.string(),
+  owner: z.string(),
+  due_date: z.string().nullable().optional(),
+});
+
+export const parsedAgendaSchema = z.object({
+  title: z.string().nullable(),
+  description: z.string().nullable(),
+  start_time: z.string().nullable(),
+  duration_minutes: z.number().int().positive().nullable(),
+  participants: z.number().int().positive().nullable(),
+  agenda_items: z.array(agendaItemSchema),
+  action_items: z.array(actionItemSchema),
+});
+
+export type ParsedAgenda = z.infer<typeof parsedAgendaSchema>;
 
 export const itemSchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string().nullable(),
   status: itemStatusSchema,
+  start_time: z.string().nullable().optional(),
+  duration_minutes: z.number().int().positive().nullable().optional(),
+  participants: z.number().int().positive().nullable().optional(),
+  agenda_items: z.array(agendaItemSchema).nullable().optional(),
+  action_items: z.array(actionItemSchema).nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -85,6 +133,39 @@ export const itemInputSchema = z.object({
   name: z.string().min(1, "Name is required").max(120, "Name is too long"),
   description: z.string().max(2000, "Description is too long").optional(),
   status: itemStatusSchema,
+  start_time: z.string().optional().nullable(),
+  duration_minutes: z
+    .number()
+    .int()
+    .positive("Must be at least 1")
+    .optional()
+    .nullable(),
+  participants: z
+    .number()
+    .int()
+    .positive("Must be at least 1")
+    .optional()
+    .nullable(),
+  agenda_items: z
+    .array(
+      z.object({
+        topic: z.string().min(1, "Topic is required"),
+        owner: z.string(),
+        minutes: z.number().int().min(0),
+      }),
+    )
+    .optional()
+    .nullable(),
+  action_items: z
+    .array(
+      z.object({
+        task: z.string().min(1, "Task is required"),
+        owner: z.string(),
+        due_date: z.string().optional().nullable(),
+      }),
+    )
+    .optional()
+    .nullable(),
 });
 
 export type ItemStatus = z.infer<typeof itemStatusSchema>;
@@ -92,10 +173,18 @@ export type Item = z.infer<typeof itemSchema>;
 export type ItemList = z.infer<typeof itemListSchema>;
 export type Health = z.infer<typeof healthSchema>;
 export type ItemInput = z.infer<typeof itemInputSchema>;
+export type AgendaItem = z.infer<typeof agendaItemSchema>;
+export type ActionItem = z.infer<typeof actionItemSchema>;
 
 /* --- endpoints --- */
 
 export const api = {
+  parseAgenda: (text: string) =>
+    request("/api/v1/ai/parse-agenda", parsedAgendaSchema, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+
   readiness: () => request("/api/v1/health/ready", healthSchema),
 
   listItems: (params: { limit?: number; offset?: number } = {}) => {

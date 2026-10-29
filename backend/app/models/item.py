@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -9,7 +10,11 @@ from app.db import Base
 
 
 class Item(Base):
-    """A task on the board. Every item belongs to exactly one user."""
+    """A task on the board. Every item belongs to exactly one user.
+
+    Extended with optional meeting fields (start_time, duration, participants,
+    agenda/action items) to support Lab 6 prerequisites.
+    """
 
     __tablename__ = "items"
     __table_args__ = (
@@ -24,6 +29,23 @@ class Item(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="todo")
+
+    # Owner — nullable so legacy rows that predate auth remain valid.
+    owner_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+
+    # --- Meeting fields (all optional so existing items keep working) ---
+    start_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    participants: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Agenda & action items stored as JSONB arrays.
+    # agenda_items: [{"topic": str, "owner": str, "minutes": int}, ...]
+    # action_items: [{"task": str, "owner": str, "due_date": str (ISO)}, ...]
+    agenda_items: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    action_items: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

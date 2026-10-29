@@ -18,7 +18,7 @@ export default function PrivacyPolicy() {
       </p>
 
       <p>
-        Task information is stored to provide the application's
+        Task information is stored to provide the application&apos;s
         functionality. We do not sell personal information.
       </p>
 

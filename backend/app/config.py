@@ -24,6 +24,10 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000"]
     )
 
+    # Amazon Bedrock
+    bedrock_region: str = "us-east-1"
+    bedrock_model_id: str = "anthropic.claude-opus-5-5"
+
     # Cognito. With no user pool configured every protected endpoint answers
     # 503, so a missing setting can never leave the API open.
     cognito_region: str = "us-east-1"
