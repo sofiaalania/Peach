@@ -1,4 +1,4 @@
-"""Backend AI agenda parser using Amazon Bedrock (Anthropic Claude).
+"""Backend AI agenda parser using Amazon Bedrock (Nova 2 Lite or Claude).
 
 Extracts structured meeting metadata, agenda topics, and action items
 from unstructured text notes or transcripts.
@@ -24,10 +24,10 @@ logger = logging.getLogger(__name__)
 
 # --- Constants ---
 
-PROMPT_VERSION = "2026-10-29.v1"
+PROMPT_VERSION = "2026-10-30.v2"
 MAX_INPUT_LENGTH = 10_000
-DEFAULT_BEDROCK_MODEL = "anthropic.claude-opus-5-5"
-DEFAULT_BEDROCK_REGION = "us-east-1"
+DEFAULT_BEDROCK_MODEL = "eu.amazon.nova-2-lite-v1:0"
+DEFAULT_BEDROCK_REGION = "eu-central-1"
 
 
 # --- Exceptions ---
@@ -101,6 +101,8 @@ CRITICAL SECURITY AND EXTRACTION DIRECTIVES:
    genuine meeting data. If no genuine meeting data exists, return empty/null values.
 5. Extract ONLY facts explicitly stated in the input. Do NOT invent or hallucinate information.
 6. Missing details must be null or empty lists, never made up.
+7. Do not invent a calendar date for relative expressions such as "tomorrow" or "next Tuesday"
+   unless an explicit reference date is supplied. Never invent missing timezone offsets.
 
 OUTPUT FORMAT:
 Return ONLY a valid JSON object with no markdown code fences, no explanations, no preamble.
@@ -170,9 +172,9 @@ async def parse_agenda(
     bedrock_client : Any, optional
         A pre-configured boto3 bedrock-runtime client (useful for testing or custom auth).
     model_id : str, optional
-        Amazon Bedrock model ID. Defaults to settings or 'anthropic.claude-opus-5-5'.
+        Amazon Bedrock model ID. Defaults to settings or 'eu.amazon.nova-2-lite-v1:0'.
     region : str, optional
-        AWS region for Bedrock. Defaults to settings or 'us-east-1'.
+        AWS region for Bedrock. Defaults to settings or 'eu-central-1'.
 
     Returns
     -------
@@ -198,60 +200,78 @@ async def parse_agenda(
     # Format user input enclosed in untrusted tags
     user_message = f"<untrusted_user_input>\n{text}\n</untrusted_user_input>"
 
-    payload = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 2048,
-        "temperature": 0.0,
-        "system": SYSTEM_PROMPT,
-        "messages": [
-            {
-                "role": "user",
-                "content": user_message,
-            }
-        ],
-    }
-    body_bytes = json.dumps(payload).encode("utf-8")
-
-    start_time = time.perf_counter()
+    is_claude = active_model_id.startswith("anthropic.")
+    started = time.perf_counter()
     try:
-        response = await asyncio.to_thread(
-            client.invoke_model,
-            modelId=active_model_id,
-            body=body_bytes,
-            contentType="application/json",
-            accept="application/json",
-        )
+        if is_claude:
+            # Preserve the existing Anthropic Messages API integration.
+            payload = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 2048,
+                "temperature": 0.0,
+                "system": SYSTEM_PROMPT,
+                "messages": [{"role": "user", "content": user_message}],
+            }
+            response = await asyncio.to_thread(
+                client.invoke_model,
+                modelId=active_model_id,
+                body=json.dumps(payload).encode("utf-8"),
+                contentType="application/json",
+                accept="application/json",
+            )
+            raw_body = response.get("body")
+            if hasattr(raw_body, "read"):
+                response_dict = json.loads(raw_body.read().decode("utf-8"))
+            elif isinstance(raw_body, (bytes, bytearray)):
+                response_dict = json.loads(raw_body.decode("utf-8"))
+            elif isinstance(raw_body, str):
+                response_dict = json.loads(raw_body)
+            elif "content" in response:
+                response_dict = response
+            else:
+                raise AgendaParsingError("Bedrock response missing expected body")
+            content_blocks = response_dict.get("content", [])
+            usage = response_dict.get("usage", {})
+            input_tokens = usage.get("input_tokens", 0)
+            output_tokens = usage.get("output_tokens", 0)
+            if response_dict.get("stop_reason") == "max_tokens":
+                raise AgendaParsingError("Model response was truncated")
+        else:
+            # Converse API works with Nova 2 Lite and other Bedrock models.
+            response_dict = await asyncio.to_thread(
+                client.converse,
+                modelId=active_model_id,
+                system=[{"text": SYSTEM_PROMPT}],
+                messages=[{
+                    "role": "user",
+                    "content": [{"text": user_message}],
+                }],
+                inferenceConfig={"maxTokens": 2048, "temperature": 0.0},
+            )
+            content_blocks = (
+                response_dict.get("output", {})
+                .get("message", {})
+                .get("content", [])
+            )
+            usage = response_dict.get("usage", {})
+            input_tokens = usage.get("inputTokens", 0)
+            output_tokens = usage.get("outputTokens", 0)
+            if response_dict.get("stopReason") == "max_tokens":
+                raise AgendaParsingError("Model response was truncated")
+    except AgendaParsingError:
+        raise
     except Exception as exc:
+        # Never log raw provider exception text: some provider errors can echo input.
         logger.error(
-            "Amazon Bedrock invoke_model failed | model_id=%s prompt_version=%s "
-            "input_chars=%d error=%s",
-            active_model_id,
-            PROMPT_VERSION,
-            len(text),
-            exc,
+            "Bedrock agenda parser invocation failed | model_id=%s "
+            "prompt_version=%s input_chars=%d error_type=%s",
+            active_model_id, PROMPT_VERSION, len(text), type(exc).__name__,
         )
-        raise AgendaParsingError(f"Bedrock invocation failed: {exc}") from exc
+        raise AgendaParsingError("Bedrock invocation failed") from exc
 
-    latency_ms = (time.perf_counter() - start_time) * 1000
-
-    # Parse Bedrock response body
-    raw_body = response.get("body")
-    if hasattr(raw_body, "read"):
-        response_dict = json.loads(raw_body.read().decode("utf-8"))
-    elif isinstance(raw_body, (bytes, bytearray)):
-        response_dict = json.loads(raw_body.decode("utf-8"))
-    elif isinstance(raw_body, str):
-        response_dict = json.loads(raw_body)
-    elif isinstance(response, dict) and "content" in response:
-        response_dict = response
-    else:
-        raise AgendaParsingError("Bedrock response missing expected 'body' payload")
+    latency_ms = (time.perf_counter() - started) * 1000
 
     # Record token usage & metrics without logging user text
-    usage = response_dict.get("usage", {})
-    input_tokens = usage.get("input_tokens", 0)
-    output_tokens = usage.get("output_tokens", 0)
-
     logger.info(
         "Bedrock agenda parser completed | model_id=%s prompt_version=%s input_chars=%d "
         "input_tokens=%s output_tokens=%s latency_ms=%.2f",
@@ -263,17 +283,21 @@ async def parse_agenda(
         latency_ms,
     )
 
-    content_blocks = response_dict.get("content", [])
-    if not content_blocks or not isinstance(content_blocks, list):
+    if not isinstance(content_blocks, list):
         raise AgendaParsingError("Model response did not contain content blocks")
-
-    raw_text = content_blocks[0].get("text", "")
+    raw_text = "".join(
+        block.get("text", "")
+        for block in content_blocks
+        if isinstance(block, dict) and isinstance(block.get("text"), str)
+    )
+    if not raw_text.strip():
+        raise AgendaParsingError("Model response did not contain text")
     cleaned_json = _extract_json_text(raw_text)
 
     try:
         data = json.loads(cleaned_json)
     except json.JSONDecodeError as exc:
-        raise AgendaParsingError(f"Model returned invalid JSON: {exc}") from exc
+        raise AgendaParsingError("Model returned invalid JSON") from exc
 
     if not isinstance(data, dict):
         raise AgendaParsingError(
@@ -283,7 +307,7 @@ async def parse_agenda(
     try:
         return ParsedAgenda.model_validate(data)
     except ValidationError as exc:
-        raise AgendaParsingError(f"Model output failed schema validation: {exc}") from exc
+        raise AgendaParsingError("Model output failed schema validation") from exc
 
 
 # --- CLI for local manual testing ---

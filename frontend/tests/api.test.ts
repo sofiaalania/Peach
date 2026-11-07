@@ -45,13 +45,20 @@ describe("api", () => {
 
   it("attaches Authorization Bearer token from session storage if present", async () => {
     sessionStorage.setItem(
-      "oidc.user:https://cognito-idp.example.com/pool:client",
+      "oidc.user:https://cognito-idp.example.com/pool:test-client",
       JSON.stringify({ id_token: "test-id-token-xyz" }),
     );
     const spy = mockFetch({ items: [], total: 0 });
     await api.listItems();
     const headers = spy.mock.calls[0][1]?.headers as Record<string, string>;
     expect(headers?.Authorization).toBe("Bearer test-id-token-xyz");
+  });
+
+  it("does not forward a token belonging to a different OIDC client", async () => {
+    sessionStorage.setItem("oidc.user:other:client", JSON.stringify({ id_token: "wrong-token" }));
+    const spy = mockFetch({ items: [], total: 0 });
+    await api.listItems();
+    expect(spy.mock.calls[0][1]?.headers).not.toHaveProperty("Authorization");
   });
 
   it("handles meeting and agenda fields in createItem", async () => {
@@ -103,7 +110,7 @@ describe("agenda parsing API", () => {
 
   it("posts text with the existing Cognito token and validates the draft", async () => {
     sessionStorage.setItem(
-      "oidc.user:test:client",
+      "oidc.user:https://cognito-idp.example.com/pool:test-client",
       JSON.stringify({ id_token: "jwt-token" }),
     );
     const fetch = mockFetch(draft);

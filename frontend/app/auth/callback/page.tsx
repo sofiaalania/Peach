@@ -1,16 +1,18 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useAuth } from "react-oidc-context";
 import { useEffect } from "react";
 
 export default function AuthCallbackPage() {
   const auth = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     if (!auth.isLoading && auth.isAuthenticated) {
-      window.location.replace("/home/");
+      router.replace("/home/");
     }
-  }, [auth.isLoading, auth.isAuthenticated]);
+  }, [auth.isLoading, auth.isAuthenticated, router]);
 
   if (auth.error) {
     return (

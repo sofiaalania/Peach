@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlignLeft, Calendar, Clock, Plus, Users } from "lucide-react";
 import { useRef, useState, type DragEvent } from "react";
+import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
 
 import { ItemFormDialog } from "@/components/item-form-dialog";
@@ -42,6 +43,7 @@ type DragInfo = {
 
 export function ItemBoard() {
   const queryClient = useQueryClient();
+  const auth = useAuth();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
   const [newStatus, setNewStatus] = useState<ItemStatus>("todo");
@@ -54,6 +56,7 @@ export function ItemBoard() {
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["items"],
     queryFn: () => api.listItems({ limit: 100 }),
+    enabled: !auth.isLoading && auth.isAuthenticated,
   });
 
   const move = useMutation({

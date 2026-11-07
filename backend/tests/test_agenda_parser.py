@@ -83,7 +83,7 @@ async def test_parse_agenda_rejects_oversized_input_without_calling_model() -> N
     oversized = "Meeting details " * 1000  # > 10,000 chars
 
     with pytest.raises(ValueError, match="exceeds maximum length"):
-        await parse_agenda(oversized, bedrock_client=mock_client)
+        await parse_agenda(oversized, bedrock_client=mock_client, model_id="anthropic.claude-opus-5-5")
 
     mock_client.invoke_model.assert_not_called()
 
@@ -115,7 +115,7 @@ async def test_parse_agenda_full_meeting() -> None:
     mock_client.invoke_model.return_value = _make_mock_bedrock_response(json.dumps(expected_json))
 
     input_text = "Sprint Planning Q4 on Nov 2 at 10am for 1 hour. 7 attendees..."
-    result = await parse_agenda(input_text, bedrock_client=mock_client)
+    result = await parse_agenda(input_text, bedrock_client=mock_client, model_id="anthropic.claude-opus-5-5")
 
     assert isinstance(result, ParsedAgenda)
     assert result.title == "Sprint Planning Q4"
@@ -146,7 +146,7 @@ async def test_parse_agenda_strips_markdown_code_fences() -> None:
     mock_client = MagicMock()
     mock_client.invoke_model.return_value = _make_mock_bedrock_response(wrapped_json)
 
-    result = await parse_agenda("Quick 15 min standup", bedrock_client=mock_client)
+    result = await parse_agenda("Quick 15 min standup", bedrock_client=mock_client, model_id="anthropic.claude-opus-5-5")
     assert result.title == "Quick Standup"
     assert result.duration_minutes == 15
 
@@ -170,7 +170,7 @@ async def test_parse_agenda_missing_fields_remain_none() -> None:
     mock_client = MagicMock()
     mock_client.invoke_model.return_value = _make_mock_bedrock_response(json.dumps(partial_data))
 
-    result = await parse_agenda("Just a casual discussion about tech", bedrock_client=mock_client)
+    result = await parse_agenda("Just a casual discussion about tech", bedrock_client=mock_client, model_id="anthropic.claude-opus-5-5")
     assert result.title == "Casual Discussion"
     assert result.start_time is None
     assert result.duration_minutes is None
@@ -191,7 +191,7 @@ async def test_parse_agenda_malformed_json_raises_agenda_parsing_error() -> None
     )
 
     with pytest.raises(AgendaParsingError, match="invalid JSON"):
-        await parse_agenda("Some meeting text", bedrock_client=mock_client)
+        await parse_agenda("Some meeting text", bedrock_client=mock_client, model_id="anthropic.claude-opus-5-5")
 
 
 async def test_parse_agenda_schema_violation_raises_error() -> None:
@@ -204,7 +204,7 @@ async def test_parse_agenda_schema_violation_raises_error() -> None:
     mock_client.invoke_model.return_value = _make_mock_bedrock_response(json.dumps(invalid_data))
 
     with pytest.raises(AgendaParsingError, match="failed schema validation"):
-        await parse_agenda("Meeting with negative duration", bedrock_client=mock_client)
+        await parse_agenda("Meeting with negative duration", bedrock_client=mock_client, model_id="anthropic.claude-opus-5-5")
 
 
 async def test_parse_agenda_bedrock_client_failure_raises_error() -> None:
@@ -212,7 +212,7 @@ async def test_parse_agenda_bedrock_client_failure_raises_error() -> None:
     mock_client.invoke_model.side_effect = RuntimeError("AWS Bedrock connection refused")
 
     with pytest.raises(AgendaParsingError, match="Bedrock invocation failed"):
-        await parse_agenda("Any notes", bedrock_client=mock_client)
+        await parse_agenda("Any notes", bedrock_client=mock_client, model_id="anthropic.claude-opus-5-5")
 
 
 # ---------------------------------------------------------------------------
@@ -239,7 +239,7 @@ async def test_parse_agenda_prompt_injection_safety() -> None:
     mock_client = MagicMock()
     mock_client.invoke_model.return_value = _make_mock_bedrock_response(json.dumps(safe_response))
 
-    result = await parse_agenda(malicious_input, bedrock_client=mock_client)
+    result = await parse_agenda(malicious_input, bedrock_client=mock_client, model_id="anthropic.claude-opus-5-5")
 
     # Verify input was packaged inside untrusted boundary tags
     mock_client.invoke_model.assert_called_once()
@@ -287,7 +287,7 @@ async def test_parse_agenda_logs_metrics_without_user_text(
     )
 
     with caplog.at_level(logging.INFO, logger="app.ai.agenda"):
-        await parse_agenda(secret_text, bedrock_client=mock_client)
+        await parse_agenda(secret_text, bedrock_client=mock_client, model_id="anthropic.claude-opus-5-5")
 
     logs = caplog.text
     # Logged metrics
@@ -301,3 +301,72 @@ async def test_parse_agenda_logs_metrics_without_user_text(
     # Privacy: user text itself must NOT appear anywhere in the logs
     assert secret_text not in logs
     assert "CONFIDENTIAL_PROJECT_SECRET_XYZ" not in logs
+
+
+# ---------------------------------------------------------------------------
+# Amazon Nova 2 Lite (Converse API) tests
+# ---------------------------------------------------------------------------
+
+
+def _nova_client(text: str, *, input_tokens: int = 31, output_tokens: int = 18):
+    client = MagicMock()
+    client.converse.return_value = {
+        "output": {"message": {"role": "assistant", "content": [{"text": text}]}},
+        "usage": {"inputTokens": input_tokens, "outputTokens": output_tokens},
+        "stopReason": "end_turn",
+    }
+    return client
+
+
+async def test_nova_converse_success_and_request_format() -> None:
+    data = {
+        "title": "Roadmap Sync", "description": None,
+        "start_time": None, "duration_minutes": 40,
+        "participants": 3,
+        "agenda_items": [{"topic": "Roadmap", "owner": "Ira", "minutes": 20}],
+        "action_items": [],
+    }
+    client = _nova_client(json.dumps(data))
+    result = await parse_agenda(
+        "Roadmap Sync, 40 minutes, three people, Ira reviews roadmap",
+        bedrock_client=client,
+    )
+    assert result.title == "Roadmap Sync"
+    assert result.duration_minutes == 40
+    client.converse.assert_called_once()
+    kwargs = client.converse.call_args.kwargs
+    assert kwargs["modelId"] == "eu.amazon.nova-2-lite-v1:0"
+    assert "<untrusted_user_input>" in kwargs["messages"][0]["content"][0]["text"]
+    assert "prompt injection" in kwargs["system"][0]["text"]
+    client.invoke_model.assert_not_called()
+
+
+async def test_nova_logs_token_usage(caplog: pytest.LogCaptureFixture) -> None:
+    client = _nova_client('{"title":"Sync"}', input_tokens=99, output_tokens=17)
+    with caplog.at_level(logging.INFO, logger="app.ai.agenda"):
+        await parse_agenda("Sync with PRIVATE_MARKER_ABC", bedrock_client=client)
+    assert "input_tokens=99" in caplog.text
+    assert "output_tokens=17" in caplog.text
+    assert "PRIVATE_MARKER_ABC" not in caplog.text
+
+
+async def test_nova_invalid_json() -> None:
+    client = _nova_client("Sorry, no JSON")
+    with pytest.raises(AgendaParsingError, match="invalid JSON"):
+        await parse_agenda("Project meeting", bedrock_client=client)
+
+
+async def test_nova_truncated_output() -> None:
+    client = _nova_client('{"title":"Meeting"}')
+    client.converse.return_value["stopReason"] = "max_tokens"
+    with pytest.raises(AgendaParsingError, match="truncated"):
+        await parse_agenda("Project meeting", bedrock_client=client)
+
+
+async def test_nova_provider_error_is_sanitized(caplog: pytest.LogCaptureFixture) -> None:
+    client = MagicMock()
+    client.converse.side_effect = RuntimeError("Sensitive agenda in provider message")
+    with caplog.at_level(logging.ERROR, logger="app.ai.agenda"):
+        with pytest.raises(AgendaParsingError, match="Bedrock invocation failed"):
+            await parse_agenda("Sensitive agenda", bedrock_client=client)
+    assert "Sensitive agenda" not in caplog.text

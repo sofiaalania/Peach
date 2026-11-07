@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { cognitoAuthConfig } from "@/lib/auth-config";
+
 /** Browser code must reach the API through the published port; server components
  *  resolve the Compose service name instead. */
 export function apiBaseUrl(): string {
@@ -22,10 +24,7 @@ export class ApiError extends Error {
 /** Get the current id_token from the OIDC session (if any). */
 function getIdToken(): string | null {
   if (typeof window === "undefined") return null;
-  const storageKey = Object.keys(sessionStorage).find((k) =>
-    k.startsWith("oidc.user:"),
-  );
-  if (!storageKey) return null;
+  const storageKey = `oidc.user:${cognitoAuthConfig.authority}:${cognitoAuthConfig.client_id}`;
   try {
     const data = JSON.parse(sessionStorage.getItem(storageKey) ?? "{}");
     return data.id_token ?? null;

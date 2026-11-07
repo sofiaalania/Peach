@@ -6,6 +6,9 @@ import { ItemBoard } from "@/components/item-board";
 import { api } from "@/lib/api";
 import { makeItem, renderWithQuery } from "./utils";
 
+const authState = vi.hoisted(() => ({ isLoading: false, isAuthenticated: true }));
+vi.mock("react-oidc-context", () => ({ useAuth: () => authState }));
+
 function mockItems() {
   vi.spyOn(api, "listItems").mockResolvedValue({
     items: [
@@ -18,6 +21,17 @@ function mockItems() {
 }
 
 describe("ItemBoard", () => {
+  it("waits for authentication before fetching Board data", () => {
+    authState.isLoading = true;
+    const list = vi.spyOn(api, "listItems");
+    try {
+      renderWithQuery(<ItemBoard />);
+      expect(list).not.toHaveBeenCalled();
+    } finally {
+      authState.isLoading = false;
+    }
+  });
+
   it("renders the three status columns", async () => {
     vi.spyOn(api, "listItems").mockResolvedValue({ items: [], total: 0 });
     renderWithQuery(<ItemBoard />);

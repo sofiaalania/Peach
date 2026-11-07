@@ -25,8 +25,8 @@ class Settings(BaseSettings):
     )
 
     # Amazon Bedrock
-    bedrock_region: str = "us-east-1"
-    bedrock_model_id: str = "anthropic.claude-opus-5-5"
+    bedrock_region: str = "eu-central-1"
+    bedrock_model_id: str = "eu.amazon.nova-2-lite-v1:0"
 
     # Cognito. With no user pool configured every protected endpoint answers
     # 503, so a missing setting can never leave the API open.

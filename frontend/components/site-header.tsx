@@ -1,10 +1,12 @@
 
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "react-oidc-context";
 
+import { cognitoAuthConfig } from "@/lib/auth-config";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -15,23 +17,26 @@ const links = [
 export function SiteHeader() {
   const pathname = usePathname();
   const auth = useAuth();
+  const queryClient = useQueryClient();
 
   const email = auth.user?.profile.email;
 
   const handleLogout = async () => {
-  const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!;
-  const logoutUri = `${process.env.NEXT_PUBLIC_SITE_URL}/home/`;
-
-  const logoutUrl = new URL(
-    "https://eu-central-1cyjzbqhth.auth.eu-central-1.amazoncognito.com/logout"
-  );
-
-  logoutUrl.searchParams.set("client_id", clientId);
-  logoutUrl.searchParams.set("logout_uri", logoutUri);
-
-  await auth.removeUser();
-  window.location.assign(logoutUrl.toString());
-};
+    const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN!;
+    const logoutUrl = new URL(
+      "/logout",
+      domain.startsWith("https://") ? domain : `https://${domain}`,
+    );
+    logoutUrl.searchParams.set("client_id", cognitoAuthConfig.client_id);
+    logoutUrl.searchParams.set(
+      "logout_uri",
+      cognitoAuthConfig.post_logout_redirect_uri!,
+    );
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await auth.removeUser();
+    window.location.assign(logoutUrl.toString());
+  };
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
